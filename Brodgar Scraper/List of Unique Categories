@@ -1,0 +1,33 @@
+let
+    // Replace "YourExistingQueryName" with the actual name of your existing query/table
+    Source = #"All Items",
+
+    // Select only the Categories column
+    CategoriesColumn = Table.SelectColumns(Source, {"Categories"}),
+
+    // Remove rows where Categories is null or empty
+    NonNullCategories = Table.SelectRows(CategoriesColumn, each ([Categories] <> null and Text.Trim([Categories]) <> "")),
+
+    // Split Categories column by line break into a list of categories per row
+    SplitCategories = Table.AddColumn(NonNullCategories, "CategoryList", each Text.Split([Categories], "#(lf)")),
+
+    // Expand the CategoryList to new rows (each category gets its own row)
+    ExpandedCategories = Table.ExpandListColumn(SplitCategories, "CategoryList"),
+
+    // Remove original Categories column (optional)
+    RemovedOriginal = Table.RemoveColumns(ExpandedCategories, {"Categories"}),
+
+    // Rename expanded column to "Category"
+    RenamedColumn = Table.RenameColumns(RemovedOriginal, {{"CategoryList", "Category"}}),
+
+    // Trim spaces from each category
+    TrimmedCategories = Table.TransformColumns(RenamedColumn, {{"Category", Text.Trim}}),
+
+    // Remove duplicate categories
+    UniqueCategories = Table.Distinct(TrimmedCategories),
+
+    // Remove blank or empty strings (just in case)
+    CleanedCategories = Table.SelectRows(UniqueCategories, each ([Category] <> ""))
+
+in
+    CleanedCategories
