@@ -1,0 +1,16 @@
+(url as text) as text =>
+let
+    delimiter = """",
+    Source = Web.Contents(url),
+    Html = Text.FromBinary(Source),
+    StartPos = Text.PositionOf(Html, "<div id=""catlinks"""),
+    SubHtml = if StartPos >= 0 then Text.Range(Html, StartPos) else "",
+    EndPos = Text.PositionOf(SubHtml, "</div>"),
+    CatDiv = if EndPos >= 0 then Text.Start(SubHtml, EndPos) else "",
+    SplitAnchors = Text.Split(CatDiv, "<a href="""),
+    ExtractLinks = List.Transform(SplitAnchors, each Text.BeforeDelimiter(_, delimiter)),
+    FilterCatLinks = List.Select(ExtractLinks, each Text.StartsWith(_, "/wiki/Category:")),
+    CleanNames = List.Transform(FilterCatLinks, each Text.AfterDelimiter(_, "/wiki/Category:")),
+    Result = Text.Combine(CleanNames, "#(lf)")
+in
+    Result
