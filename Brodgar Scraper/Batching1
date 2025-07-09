@@ -1,0 +1,51 @@
+let
+    Source = ItemList,
+    Batch = Table.Range(Source, 0, 100),
+
+    // Pull HTML content and extract tables
+    WithPage = Table.AddColumn(Batch, "Page", each try Web.Page(Web.Contents([URL])) otherwise null),
+    ExpandPage = Table.ExpandTableColumn(WithPage, "Page", {"Data"}, {"Page.Data"}),
+    ExpandPageData = Table.ExpandTableColumn(ExpandPage, "Page.Data", {"Column1", "Column2", "Column3"}, {"Col1", "Col2", "Col3"}),
+
+    // Define labels to extract
+    FieldsToExtract = {
+        "Object(s) Required", "Produced By",
+        "Base LP", "Mental Weight", "EXP Cost", "LP / Hour (real)",
+        "Energy Filled", "Hunger Filled", "Satiates", "Gilding Chance",
+        "Gilding Attributes", "Gilding Bonus 1", "Gilding Bonus 2",
+        "Gilding Bonus 3", "Gilding Bonus 4"
+    },
+
+    // Filter for rows that match Col2 or Col1 depending on label type
+    Filtered = Table.SelectRows(ExpandPageData, each 
+        List.Contains({"Object(s) Required", "Produced By"}, [Col2]) or 
+        List.Contains(FieldsToExtract, [Col1])
+    ),
+
+    // For "Object(s) Required" and "Produced By", take from Col3
+    WithLabelValue = Table.AddColumn(Filtered, "Label", each if List.Contains({"Object(s) Required", "Produced By"}, [Col2]) then [Col2] else [Col1]),
+    WithFinalValue = Table.AddColumn(WithLabelValue, "Value", each if [Label] = [Col2] then [Col3] else [Col2]),
+
+    KeepRelevant = Table.SelectColumns(WithFinalValue, {"title", "Label", "Value"}),
+
+    // Pivot into separate columns
+    Pivoted = Table.Pivot(KeepRelevant, List.Distinct(KeepRelevant[Label]), "Label", "Value"),
+
+    // Clean up "Object(s) Required" and "Produced By" like before
+    CleanText = (input as nullable text) as nullable text =>
+        let
+            cleaned = List.Accumulate(
+                {" x12", " x11", " x10", " x9", " x8", " x7", " x6", " x5", " x4", " x3", " x2", " x1"},
+                input,
+                (state, qty) => if state <> null then Text.Replace(state, qty, "") else null
+            ),
+            lineBroken = if cleaned <> null then Text.Replace(cleaned, ", ", "#(lf)") else null
+        in
+            Text.Trim(lineBroken),
+
+    Final = Table.TransformColumns(Pivoted, {
+        {"Object(s) Required", each CleanText(_), type text},
+        {"Produced By", each CleanText(_), type text}
+    })
+in
+    Final
